@@ -1,39 +1,14 @@
 import SwiftUI
 import Introspect
 
-private struct PullToRefresh: UIViewRepresentable {
+struct PullToRefresh: UIViewRepresentable {
+    let onRefresh: (_ endRefreshing: @escaping () -> Void) -> Void
     
-    @Binding var isShowing: Bool
-    let onRefresh: () -> Void
-    
-    public init(
-        isShowing: Binding<Bool>,
-        onRefresh: @escaping () -> Void
-    ) {
-        _isShowing = isShowing
+    public init(onRefresh: @escaping (_ endRefreshing: @escaping () -> Void) -> Void) {
         self.onRefresh = onRefresh
     }
     
-    public class Coordinator {
-        let onRefresh: () -> Void
-        let isShowing: Binding<Bool>
-        
-        init(
-            onRefresh: @escaping () -> Void,
-            isShowing: Binding<Bool>
-        ) {
-            self.onRefresh = onRefresh
-            self.isShowing = isShowing
-        }
-        
-        @objc
-        func onValueChanged() {
-            isShowing.wrappedValue = true
-            onRefresh()
-        }
-    }
-    
-    public func makeUIView(context: UIViewRepresentableContext<PullToRefresh>) -> UIView {
+    public func makeUIView(context: Context) -> UIView {
         let view = UIView(frame: .zero)
         view.isHidden = true
         view.isUserInteractionEnabled = false
@@ -41,7 +16,6 @@ private struct PullToRefresh: UIViewRepresentable {
     }
     
     private func tableView(entry: UIView) -> UITableView? {
-        
         // Search in ancestors
         if let tableView = Introspect.findAncestor(ofType: UITableView.self, from: entry) {
             return tableView
@@ -54,39 +28,56 @@ private struct PullToRefresh: UIViewRepresentable {
         // Search in siblings
         return Introspect.previousSibling(containing: UITableView.self, from: viewHost)
     }
-
-    public func updateUIView(_ uiView: UIView, context: UIViewRepresentableContext<PullToRefresh>) {
-        
+    
+    func updateUIView(_ uiView: UIViewType, context: Context) {
         DispatchQueue.main.asyncAfter(deadline: .now()) {
-            
             guard let tableView = self.tableView(entry: uiView) else {
                 return
             }
             
-            if let refreshControl = tableView.refreshControl {
-                if self.isShowing {
-                    refreshControl.beginRefreshing()
-                } else {
-                    refreshControl.endRefreshing()
-                }
-                return
-            }
+            //NO MORE
+//            if let refreshControl = tableView.refreshControl {
+//                if self.isShowing {
+//                    refreshControl.beginRefreshing()
+//                } else {
+//                    refreshControl.endRefreshing()
+//                }
+//                return
+//            }
             
             let refreshControl = UIRefreshControl()
-            refreshControl.addTarget(context.coordinator, action: #selector(Coordinator.onValueChanged), for: .valueChanged)
+            refreshControl.addTarget(context.coordinator, action: #selector(Coordinator.handleRefreshControl), for: .valueChanged)
             tableView.refreshControl = refreshControl
         }
     }
     
-    public func makeCoordinator() -> Coordinator {
-        return Coordinator(onRefresh: onRefresh, isShowing: $isShowing)
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self, onRefresh: onRefresh)
+    }
+    
+    class Coordinator: NSObject {
+        let refreshControl: RefreshControl
+        let onRefresh: (_ endRefreshing: @escaping () -> Void) -> Void
+        
+        init(_ refreshControl: RefreshControl, onRefresh: @escaping (_ endRefreshing: @escaping () -> Void) -> Void) {
+            self.refreshControl = refreshControl
+            self.onRefresh = onRefresh
+        }
+        
+        @objc
+        func handleRefreshControl(sender: UIRefreshControl) {
+            //IT NEEDS TO BE HANDLED FROM HERE
+            onRefresh() {
+                sender.endRefreshing()
+            }
+        }
     }
 }
 
 extension View {
-    public func pullToRefresh(isShowing: Binding<Bool>, onRefresh: @escaping () -> Void) -> some View {
+    public func pullToRefresh(onRefresh: @escaping (_ endRefreshing: @escaping () -> Void) -> Void) -> some View {
         return overlay(
-            PullToRefresh(isShowing: isShowing, onRefresh: onRefresh)
+            RefreshControl(onRefresh: onRefresh)
                 .frame(width: 0, height: 0)
         )
     }
